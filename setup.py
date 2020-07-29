@@ -12,7 +12,7 @@ setup(name='memory-analysis',
       description='perform memory analysis on data blobs without real organization',
       author='Adam Pridgen',
       author_email='adam.pridgen.phd@gmail.com',
-      install_requires=[],
+      install_requires=['wheel'],
       packages=find_packages('src'),
       package_dir={'': 'src'},
 )
