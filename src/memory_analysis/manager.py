@@ -1,5 +1,5 @@
 from .store.io import IOBacked
-from .store.buffer import BufferBacked
+from .store.bfr import BufferBacked
 
 
 class Manager(object):
