@@ -10,6 +10,11 @@ class Manager(object):
         self.maps_by_page = {}
 
         self.known_pages = set()
+        self.page_size = kargs.get('page_size', 4096)
+        self.page_mask = util.get_page_mask(self.page_size)
+
+    def calc_page(self, vaddr):
+        return self.page_mask & vaddr
 
     def does_map_exist(self, vastart, filename, name, bm):
         if len(bm.get_page_cache() & self.known_pages) > 0:
@@ -97,15 +102,11 @@ class Manager(object):
                    name in self.maps_by_name
         return False
 
-
     def get_page(self, vaddr):
-        if vaddr not in self.known_pages:
-            return None
-        if vaddr
+        page = self.calc_page(vaddr)
+        if page in self.known_pages and page in self.maps_by_page:
+            return self.maps_by_page[page]
+        return None
 
-    def remove_map(self, va_start):
-        if not vastart in known_pages:
-            return False
-
-        mb = self.maps_by_page[]
+    
 
