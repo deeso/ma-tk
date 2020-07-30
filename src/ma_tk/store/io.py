@@ -1,5 +1,7 @@
 from .memory import MemoryObject
 from threading import RLock
+import os
+
 
 class IOBacked(MemoryObject):
 
@@ -30,3 +32,25 @@ class IOBacked(MemoryObject):
         # finally:
         #     self.io_lock.release()
         return data
+
+    def _seek(self, addr=None, offset=None, phy_addr=None):
+        r = False
+        if offset is not None:
+            self.io_obj.seek(offset, os.SEEK_CUR)
+            self.pos = self.io_obj.tell()
+            return True
+
+        diff = None
+        if vaddr is not None and self.va_start <= vaddr and \
+           vaddr < self.va_start + self.size:
+            diff = vaddr - self.va_start
+            self.io_obj.seek(diff)
+            self.pos = self.io_obj.tell()
+            r = True
+        elif phy_addr is not None and self.phy_start <= phy_addr and \
+           phy_addr < self.phy_start + self.size:
+            diff = phy_addr - self.phy_start
+            self.io_obj.seek(diff)
+            self.pos = self.io_obj.tell()
+            r = True
+        return r
