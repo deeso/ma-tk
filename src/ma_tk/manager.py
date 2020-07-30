@@ -16,12 +16,25 @@ class Manager(BaseManager):
             return True
         return False
 
-    def add_iomap(self, filename, va_start, size, offset=0, flags=0, page_size=4096):
-        phy_start = offset
-        ibm = IOBacked(io_obj, va_start, size, phy_start, 
-                       page_size=page_size, filename=filename, flags=flags)
+    def add_iomap(self, filename, va_start, size, offset=0, phy_start=0, flags=0, page_size=4096):
+        '''
+        opens the file and seeks to the relevant offset.
+        the offset is then used as the physical start of this data segment 
+        '''
+        # FIXME couple of ambiguities here
+        # 1) Mapping File to a Virtual Addr space that is larger than the file
+        # size
+        # 2) Starting the physical address at an offset in the file can result
+        # in a file size that is less than the VA space 
+        # 3) if the position in file falls out of sync with the physical address
+        # reading the space will happen incorrectly
+        io_obj = open(filename, 'rb')
+        io_obj.seek(offset)
+        ibm = IOBacked(io_obj, va_start, size, 
+                       phy_start=phy_start, page_size=page_size, 
+                       filename=filename, flags=flags)
         
-        if self.add_map_to_kb(ibm):
+        if not self.add_map_to_kb(ibm):
             del ibm
             io_obj.close()
             return None
@@ -50,34 +63,6 @@ class Manager(BaseManager):
             return None
         return bbm
 
-    def add_map_to_kb(self, bm):
-        name = bm.get_name()
-        pc = bm.get_page_cache()
-        
-        if self.check_presence(bm):
-            return False
-
-        self.vaddr_pos = bm.get_va_start()
-        self.page_cache = self.page_cache | pc
-        for p in pc:
-            self.maps_by_page[p] = bm
-        self.maps_by_name[name] = bm
-        return True
-
-    def remove_map_from_kb(self, bm):
-        name = bm.get_name()
-        pc = bm.get_page_cache()
-        
-        if not self.check_presence(bm):
-            return True
-
-        self.page_cache = {i for i in self.page_cache if i not in pc}        
-
-        for p in pc:
-            del self.maps_by_page[pc]
-
-        del self.maps_by_name[name]
-        return True
 
 
     

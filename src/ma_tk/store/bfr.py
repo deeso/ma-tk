@@ -2,8 +2,9 @@ from .memory import MemoryObject
 
 class BufferBacked(MemoryObject):
 
-    def __init__(self, bytes_data, va_start: int, size: int, phy_start: int = 0, 
-                 page_size: int = 4096, filename: str = None, flags: str = 0):
+    def __init__(self, bytes_data, va_start: int, size: int, 
+                 phy_start: int = 0,  page_size: int = 4096, 
+                 filename: str = None, flags: str = 0):
         super().__init__(va_start, phy_start, size, page_size=page_size, flags=flags) 
         self.va_end = self.va_start + size
         self.filename = filename if filename else 'anonymous'

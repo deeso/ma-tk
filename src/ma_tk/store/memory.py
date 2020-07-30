@@ -242,7 +242,7 @@ class MemoryObject(object):
             return None
         result = self.read(8, offset)
 
-        fmt = 'q' if signed else Q
+        fmt = 'q' if signed else 'Q'
         endian = '<' if littleendian else '>'
         if littleendian:
             return struct.unpack("{}{}".format(endian, fmt), result)[0]

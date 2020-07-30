@@ -12,10 +12,38 @@ class BaseManager(object):
         self.page_size = kargs.get('page_size', 4096)
         self.page_mask = util.get_page_mask(self.page_size)
 
+
     def get_map(self, vaddr):
         if not self.check_presence(vaddr=vaddr):
             return None
         return self.maps_by_page[self.calc_page(vaddr)]
+
+    def add_map_to_kb(self, bm):
+        name = bm.get_name()
+        pc = bm.get_page_cache()
+        if self.check_presence(bm):
+            return False
+        self.vaddr_pos = bm.get_va_start()
+        self.page_cache = self.page_cache | pc
+        for p in pc:
+            self.maps_by_page[p] = bm
+        self.maps_by_name[name] = bm
+        return True
+
+    def remove_map_from_kb(self, bm):
+        name = bm.get_name()
+        pc = bm.get_page_cache()
+        
+        if not self.check_presence(bm):
+            return True
+
+        self.page_cache = {i for i in self.page_cache if i not in pc}        
+
+        for p in pc:
+            del self.maps_by_page[pc]
+
+        del self.maps_by_name[name]
+        return True
 
     def get_vaddr_pos(self):
         return self.vaddr_pos
@@ -33,7 +61,6 @@ class BaseManager(object):
         if bm is not None:
             name = bm.get_name()
             pc = bm.get_page_cache()
-
             return len(pc & self.page_cache) > 0 or \
                    name in self.maps_by_name
         return False
@@ -119,7 +146,7 @@ class BaseManager(object):
         addr = self.vaddr_pos if addr is None else addr
         bm = self.get_map(addr)
         if bm is None:
-            return None        
+            return None
         data = bm.read_word(addr=addr, littleendian=littleendian)
         self.vaddr_pos = bm.get_current_vaddr()
         return data
@@ -131,7 +158,7 @@ class BaseManager(object):
         bm = self.get_map(addr)
         if bm is None:
             return None        
-        data = self.read_dword(addr=addr, littleendian=littleendian)
+        data = bm.read_dword(addr=addr, littleendian=littleendian)
         self.vaddr_pos = bm.get_current_vaddr()
         return data
 
@@ -141,7 +168,7 @@ class BaseManager(object):
         bm = self.get_map(addr)
         if bm is None:
             return None        
-        data = self.read_dword(addr=addr, littleendian=littleendian)
+        data = bm.read_qword(addr=addr, littleendian=littleendian)
         self.vaddr_pos = bm.get_current_vaddr()
         return data
 
@@ -151,7 +178,7 @@ class BaseManager(object):
         bm = self.get_map(addr)
         if bm is None:
             return None
-        data = self.read_cstruct(cstruct_klass, addr)
+        data = bm.read_cstruct(cstruct_klass, addr)
         self.vaddr_pos = bm.get_current_vaddr()
         return data
 

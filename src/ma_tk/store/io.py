@@ -6,42 +6,57 @@ import os
 class IOBacked(MemoryObject):
 
     def __init__(self, io_obj, va_start: int, size: int, 
-                 phy_start: int = 0, page_size: int = 4096, filename: str = None,
-                 flags: int = 0):
+                 phy_start: int = 0, page_size: int = 4096, 
+                 filename: str = None, flags: int = 0):
+
+        # NOTES file seeking
+        # os.SEEK_CUR seek from current location
+        # os.SEEK_SET seek from the beginning of file abs(pos)
+        # os.SEEK_END seek from the end of the file
+
+        # FIXME couple of ambiguities here
+        # 1) Mapping File to a Virtual Addr space that is larger than the file
+        # size
+        # 2) Starting the physical address at an offset in the file can result
+        # in a file size that is less than the VA space 
+        # 3) if the position in file falls out of sync with the physical address
+        # reading the space will happen incorrectly
+
         super().__init__(va_start, phy_start, size, page_size, flags) 
-        self.va_end = va_end
+        self.va_end = va_start + size
         self.filename = filename if filename else 'anonymous'
-        self.name = "{016:x}-{016:x}:file:{}".format(va_start, self.filename)   
+        self.name = "{:016x}-{:016x}:file:{}".format(va_start, va_start + size, self.filename)   
         self.io_obj = io_obj
+        self._abs_start = self.io_obj.tell() 
         self.pos = self.io_obj.tell()
         self.io_lock = RLock()
-
-    def _read(self, size, paddr=None):
+    
+    def _read(self, size, pos=None):
         # TODO try except finally needed here
         data = b''
         # self.io_lock.acquire()
+        pos = self.pos if pos is None else pos
+        if pos != self.pos:
+            self._seek(phy_addr=pos)
         try:
-            if paddr is None:
-                paddr = self.pos
-            if self.pos != paddr:
-                self.io_obj.seek(paddr)
             data = self.io_obj.read(size)
             self.pos = pos+len(data)
         except:
-            pass
+            raise
         # finally:
         #     self.io_lock.release()
         return data
 
     def _seek(self, addr=None, offset=None, phy_addr=None):
         r = False
-        if offset is not None:
-            self.io_obj.seek(offset, os.SEEK_CUR)
-            self.pos = self.io_obj.tell()
-            return True
-
         diff = None
-        if vaddr is not None and self.va_start <= vaddr and \
+        if offset is not None:
+            if self._abs_start + offset < self._abs_start + self.size:
+                self.io_obj.seek(offset, os.SEEK_CUR)
+                self.pos = self.io_obj.tell()
+                r = True
+        elif vaddr is not None and \
+           self.va_start <= vaddr and \
            vaddr < self.va_start + self.size:
             diff = vaddr - self.va_start
             self.io_obj.seek(diff)
@@ -53,4 +68,4 @@ class IOBacked(MemoryObject):
             self.io_obj.seek(diff)
             self.pos = self.io_obj.tell()
             r = True
-        return r
+        return r    
