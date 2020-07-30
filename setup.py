@@ -7,7 +7,7 @@ data_files = [(d, [os.path.join(d, f) for f in files])
               for d, folders, files in os.walk(os.path.join('src', 'config'))]
 
 
-setup(name='memory-analysis',
+setup(name='memory-analysis-tk',
       version='.01',
       description='perform memory analysis on data blobs without real organization',
       author='Adam Pridgen',
