@@ -16,6 +16,28 @@ class Manager(BaseManager):
             return True
         return False
 
+    def add_ioobj(self, io_obj, va_start, size, filename=None, offset=0, phy_start=0, flags=0, page_size=4096):
+        '''
+        opens the file and seeks to the relevant offset.
+        the offset is then used as the physical start of this data segment 
+        '''
+        # FIXME couple of ambiguities here
+        # 1) Mapping File to a Virtual Addr space that is larger than the file
+        # size
+        # 2) Starting the physical address at an offset in the file can result
+        # in a file size that is less than the VA space 
+        # 3) if the position in file falls out of sync with the physical address
+        # reading the space will happen incorrectly
+        ibm = IOBacked(io_obj, va_start, size, 
+                       phy_start=phy_start, page_size=page_size, 
+                       filename=filename, flags=flags)
+        
+        if not self.add_map_to_kb(ibm):
+            del ibm
+            io_obj.close()
+            return None
+        return ibm
+
     def add_iomap(self, filename, va_start, size, offset=0, phy_start=0, flags=0, page_size=4096):
         '''
         opens the file and seeks to the relevant offset.
