@@ -83,7 +83,6 @@ class TestManager(unittest.TestCase):
         mgr.add_iomap(self.TMP_FILE_NAME, FILE_VA, self.TMP_FILE_SZ, offset=0, flags=0, page_size=4096)
         self.assertTrue(mgr.get_vaddr_pos() == FILE_VA)
         data = mgr.read_word()
-        print(mgr.get_vaddr_pos(), hex(data))
         self.assertTrue(43947 == data)
         mgr.seek(offset=-2)
         data = mgr.read(2)

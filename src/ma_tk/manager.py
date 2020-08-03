@@ -1,12 +1,28 @@
 from .store.io import IOBacked
 from .store.bfr import BufferBacked
+from .load.file import FileLoader
 from . import util
 from .store.base_manager import BaseManager
 
 class Manager(BaseManager):
 
     def __init__(self, **kargs):
-        super().__init__(**kargs) 
+        super().__init__(**kargs)
+        self.namespace = kargs.get('namespace', 'global')
+
+        self.required_files_location_list = kargs.get('required_files_location_list', None)
+        self.required_files_location = kargs.get('required_files_location', None)
+        self.required_files_bytes = kargs.get('required_files_bytes', None)
+        self.required_files_dir = kargs.get('required_files_dir', None)
+        self.required_files_zip = kargs.get('required_files_zip', None)
+        self.file_loader = FileLoader.create_fileloader(
+            required_files_location_list=self.required_files_location_list,
+            required_files_location=self.required_files_location,
+            required_files_bytes=self.required_files_bytes,
+            required_files_dir=self.required_files_dir,
+            required_files_zip=self.required_files_zip,
+            namespace=self.namespace)
+
         
     def calc_page(self, vaddr):
         return self.page_mask & vaddr
@@ -50,7 +66,7 @@ class Manager(BaseManager):
         # in a file size that is less than the VA space 
         # 3) if the position in file falls out of sync with the physical address
         # reading the space will happen incorrectly
-        io_obj = open(filename, 'rb')
+        io_obj = self.file_loader.load_file(filename, namespace=self.namespace)
         io_obj.seek(offset)
         ibm = IOBacked(io_obj, va_start, size, 
                        phy_start=phy_start, page_size=page_size, 

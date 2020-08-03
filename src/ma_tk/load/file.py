@@ -2,6 +2,9 @@ import zipfile
 import os
 import io
 
+from ..store.io import IOBacked
+from ..store.bfr import BufferBacked
+
 class _Buffer(io.BytesIO):
     pass
 
@@ -103,7 +106,27 @@ class FileObj(object):
                 if k in ['fd',]:
                     continue
         return file_info
+    
+    def seek(self, offset, whence=os.SEEK_CUR):
+        self.get_fd().seek(offset, whence)
+        return self.tell()
 
+    def tell(self):
+        return self.get_fd().tell()
+
+    def read(self, offset, size):
+        fd = self.get_fd()
+        filename = self.get_filename()
+        
+        # ef = elf_info.get_file_interpreter()
+        if fd is None:
+            self.info("Invalid file descriptor for {}".format(filename))
+            return None
+        pos = fd.tell()
+        fd.seek(offset, os.SEEK_SET)
+        data = fd.read(size)
+        fd.seek(pos, os.SEEK_SET)
+        return data
 
 class OpenFile(object):
     @classmethod
@@ -181,8 +204,8 @@ class FileLoader(object):
                  required_files_bytes: dict=None,
                  required_files_dir: str=None,
                  required_files_zip: str=None,
-                 name='global'):
-        loader = cls.FILE_LOADERS(name, None)
+                 namespace='global'):
+        loader = cls.FILE_LOADERS.get(namespace, None)
         if loader is None:
             loader = FileLoader(
                  required_files_location_list=required_files_location_list,
@@ -190,16 +213,18 @@ class FileLoader(object):
                  required_files_bytes=required_files_bytes,
                  required_files_dir=required_files_dir,
                  required_files_zip=required_files_zip,
-                 name=name)
+                 namespace=namespace)
         else:
-            loader.update(required_files_location_list=required_files_location_list,
-                 required_files_location=required_files_location,
-                 required_files_bytes=required_files_bytes,
-                 required_files_dir=required_files_dir,
-                 required_files_zip=required_files_zip)
+            loader.update(
+                required_files_location_list=required_files_location_list,
+                required_files_location=required_files_location,
+                required_files_bytes=required_files_bytes,
+                required_files_dir=required_files_dir,
+                required_files_zip=required_files_zip)
         return loader
 
-    def update(required_files_location_list: list=None,
+    def update(self, 
+               required_files_location_list: list=None,
                required_files_location: dict=None,
                required_files_bytes: dict=None,
                required_files_dir: str=None,
@@ -236,19 +261,21 @@ class FileLoader(object):
                  required_files_bytes: dict=None,
                  required_files_dir: str=None,
                  required_files_zip: str=None,
-                 name='global'):
+                 namespace='global'):
         '''
         create a file loader in the static FILE_LOADERS dict, if one already exists,
         nothing really happens 
         '''
-        if name not in self.FILE_LOADERS:
-            self.FILE_LOADERS[name] = self
+        if namespace not in self.FILE_LOADERS:
+            self.FILE_LOADERS[namespace] = self
 
-        self.required_files_to_elf = {}
+        self.namespace = namespace
+        self.loaded_filename_to_objs = {}
         self.required_files_to_location = {}
         self.rfiles_bytes = {}
         self.rfiles_location = {}
         self.loaded_rfiles = {}
+        self.rfiles_zip_names = []
 
         self.rfiles_zip = None
         self.update(required_files_location_list=required_files_location_list,
@@ -257,26 +284,68 @@ class FileLoader(object):
                  required_files_dir=required_files_dir,
                  required_files_zip=required_files_zip)
 
+    def is_file_loaded(self, filename, namespace=None, namespaces=None, search_all=False):
+        if search_all:
+            return self.is_file_loaded(filename, namespaces=list(self.FILE_LOADERS))
+        if namespace is None and namespaces is None and\
+          filename in self.loaded_rfiles:
+            return self.namespace
+        elif namespace is not None and \
+            filename in self.FILE_LOADERS[namespace].loaded_rfiles:
+            return namespace 
+        elif namespaces is not None:
+            for namespace in namespaces:
+                 loader = self.FILE_LOADERS[namespace]
+                 if loader.is_file_loaded(filename, namespace=namespace):
+                    return namespace            
+        return None
 
-    def load_file(self, filename):
+    @classmethod
+    def global_load_file(self, filename, namespace=None, namespaces=None, add_all=False, inmemory=False):
+        if namespace is None and namespaces is None:
+            namespace = 'global'
+
+        if namespace not in cls.FILE_LOADERS:
+            fl = cls.create_fileloader(namespace=namespace)
+        fl.load_file(filename, namespace=namespace, namespaces=namespaces, add_all=add_all,inmemory=False)
+
+    def load_file(self, filename, namespace=None, 
+                  namespaces=None, add_all=False, reload=False, inmemory=False):
         '''
         1) resolve the required file,
         2) load the file if found,
         3) map the sections by p_offset from the segment header
         None if any of this stuff fails.
         '''
-        if filename in self.loaded_rfiles:
-            return self.loaded_rfiles[filename]
+        # FIXME when reloading the file, do we reload it for all namespaces or
+        # only the namespace specified in the arguments
+        _namespace = None
+        if not reload:
+            _namespace = self.is_file_loaded(filename, namespace, 
+                                             namespaces, search_all=add_all)
+
+        if _namespace is not None and not reload:
+            return self.FILE_LOADERS[_namespace].loaded_rfiles[filename]
+
+        if namespaces is None:
+            namespaces = []
+
+        if namespace is not None:
+            namespaces.append(namespace)
+        elif add_all:
+            namespaces = list(self.FILE_LOADERS.keys())
+        
+        if len(namespaces) == 0:
+            namespaces.append(self.namespace)
 
         location = self.where_is_file(filename)
         if location is None:
             return None
         
-        file_info = self.load_location(location)
-        if file_info is None:
-            self.required_files_to_elf[filename] = None
-            return None
+        file_info = self.load_location(location, inmemory=inmemory)
 
+        for namespace in namespaces:
+            self.FILE_LOADERS[namespace].loaded_rfiles[filename] = file_info
         return file_info
 
     def get_required_file(self, filename):
@@ -284,23 +353,46 @@ class FileLoader(object):
         list of required files by the core file,
         based on the NT_FILES note
         '''
-        if filename in self.required_files_to_elf:
-            return self.required_files_to_elf[filename]
+        if filename in self.loaded_filename_to_objs:
+            return self.loaded_filename_to_objs[filename]
         result = self.load_file(filename)
-        self.required_files_to_elf[filename] = result
-        return self.required_files_to_elf[filename]
+        self.loaded_filename_to_objs[filename] = result
+        return self.loaded_filename_to_objs[filename]
 
-    def load_location(self, location):
+    def load_location(self, location, inmemory=False):
         '''
         load the file using the Elf loader class
         returns an IO file descriptor and pyelf file
         '''
+        if location is None:
+            return None
+        elif isinstance(location, bytes):
+            self.load_location_bytes(location, inmemory=inmemory)
+        if location.find('bytes::') > -1:
+            data = self.rfiles_bytes[location]
+            file_info = OpenFile.from_bytes(data, fname)
+            file_info.location = location
+        elif location.find('zip::') > -1:
+            name = location.strip('zip::')
+            file_info = OpenFile.from_zip(self.rfiles_zip, name, inmemory)
+            file_info.location = location
+        elif location is not None:
+            file_info = OpenFile.from_file(location, inmemory)
+            file_info.location = location
+        return file_info
+
+    def load_location_bytes(self, location, inmemory=False):
+        '''
+        load the file using the Elf loader class
+        returns an IO file descriptor and pyelf file
+        '''
+
         if location.find(b'bytes::') > -1:
             data = self.rfiles_bytes[location]
             file_info = OpenFile.from_bytes(data, fname)
             file_info.location = location
         elif location.find(b'zip::') > -1:
-            name = location.strip('zip::')
+            name = location.strip(b'zip::')
             file_info = OpenFile.from_zip(self.rfiles_zip, name, inmemory)
             file_info.location = location
         elif location is not None:
@@ -331,9 +423,10 @@ class FileLoader(object):
             location = b'bytes::' if location is None else location
 
         # try just the filename if its in a path
-        if location is None and os.path.split(filename) > 0:
-            just_fn = os.path.split(filename)
-            location = self.where_is_file(filename)
+        if location is None and len(os.path.split(filename)) > 1:
+            just_fn = os.path.split(filename)[-1]
+            if filename != just_fn:
+                location = self.where_is_file(just_fn)
 
         # check the zip names list
         if location is None and self.rfiles_zip_names is not None:
@@ -348,3 +441,24 @@ class FileLoader(object):
                 location = filename
         self.required_files_to_location[filename] = location
         return location
+
+    def load_file_to_memory(self, filename, size, offset, 
+                            va_start, page_size=4096, flags=0, 
+                            inmemory=True):
+        file_info = self.load_file(file_name, inmemory=inmemory)
+        ibm = None
+        if file_info is not None and inmemory:
+            bytes_obj = file_info.read(offset, size)
+            phy_start = 0
+            size = size if size else len(bytes_obj)
+            ibm = BufferBacked(bytes_obj, va_start, len(bytes_obj), 
+                               phy_start=phy_start, page_size=page_size, 
+                               filename=file_info.get_filename(), flags=flags)
+        elif file_info is not None:
+            # should create a new ma_tk.load.FileObj to alleviate unsafe reads/writes
+            io_obj = file_info.clone()
+            phy_start = offset
+            ibm = IOBacked(io_obj, va_start, size, 
+                       phy_start=phy_start, page_size=page_size, 
+                       filename=file_info.get_filename(), flags=flags)
+        return ibm

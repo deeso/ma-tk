@@ -22,13 +22,15 @@ class IOBacked(MemoryObject):
         # 3) if the position in file falls out of sync with the physical address
         # reading the space will happen incorrectly
 
+        # note io_obj is a ma_tk.file.FileObj
+
         super().__init__(va_start, phy_start, size, page_size, flags) 
         self.va_end = va_start + size
         self.filename = filename if filename else 'anonymous'
         self.name = "{:016x}-{:016x}:file:{}".format(va_start, va_start + size, self.filename)   
         self.io_obj = io_obj
-        self._abs_start = self.io_obj.tell() 
-        self.pos = self.io_obj.tell()
+        self._abs_start = self.io_obj.get_fd().tell() 
+        self.pos = self.io_obj.get_fd().tell()
         self.io_lock = RLock()
     
     def _read(self, size, pos=None):
@@ -39,7 +41,7 @@ class IOBacked(MemoryObject):
         if pos != self.pos:
             self._seek(phy_addr=pos)
         try:
-            data = self.io_obj.read(size)
+            data = self.io_obj.get_fd().read(size)
             self.pos = pos+len(data)
         except:
             raise
@@ -52,20 +54,20 @@ class IOBacked(MemoryObject):
         diff = None
         if offset is not None:
             if self._abs_start + offset < self._abs_start + self.size:
-                self.io_obj.seek(offset, os.SEEK_CUR)
+                self.io_obj.get_fd().seek(offset, os.SEEK_CUR)
                 self.pos = self.io_obj.tell()
                 r = True
         elif vaddr is not None and \
            self.va_start <= vaddr and \
            vaddr < self.va_start + self.size:
             diff = vaddr - self.va_start
-            self.io_obj.seek(diff)
-            self.pos = self.io_obj.tell()
+            self.io_obj.get_fd().seek(diff)
+            self.pos = self.io_obj.get_fd().tell()
             r = True
         elif phy_addr is not None and self.phy_start <= phy_addr and \
            phy_addr < self.phy_start + self.size:
             diff = phy_addr - self.phy_start
-            self.io_obj.seek(diff)
-            self.pos = self.io_obj.tell()
+            self.io_obj.get_fd().seek(diff)
+            self.pos = self.io_obj.get_fd().tell()
             r = True
         return r    
