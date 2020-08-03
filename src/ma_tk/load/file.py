@@ -198,6 +198,9 @@ class FileLoader(object):
             return zipfile.ZipFile(zipname).namelist()
         return None
 
+    def set_file_opener(self, file_opener_klass):
+        self.FILE_OPENER = file_opener_klass
+
     @classmethod
     def create_fileloader(cls, required_files_location_list: list=None,
                  required_files_location: dict=None,
@@ -266,6 +269,7 @@ class FileLoader(object):
         create a file loader in the static FILE_LOADERS dict, if one already exists,
         nothing really happens 
         '''
+        self.FILE_OPENER = OpenFile
         if namespace not in self.FILE_LOADERS:
             self.FILE_LOADERS[namespace] = self
 
@@ -285,7 +289,7 @@ class FileLoader(object):
                  required_files_zip=required_files_zip)
 
     def load_file_from_zip(self, zipname, filename=None, inmemory=False, add_all=False):
-        file_obj = OpenFile.from_zip(zipname, filename, inmemory)
+        file_obj = self.FILE_OPENER.from_zip(zipname, filename, inmemory)
         if file_obj is not None:
             self.add_file_to_namespace(file_obj, add_all=add_all)
         return file_obj
@@ -326,6 +330,7 @@ class FileLoader(object):
         if len(namespaces) == 0 or namespace not in namespaces:
             namespaces.append(namespace)
 
+        filename = file_obj.get_filename()
         for namespace in namespaces:
             self.FILE_LOADERS[namespace].loaded_rfiles[filename] = file_obj
 
@@ -341,7 +346,6 @@ class FileLoader(object):
         '''
         # FIXME when reloading the file, do we reload it for all namespaces or
         # only the namespace specified in the arguments
-        
         if not reload:
             _namespace = self.is_file_loaded(filename, namespace, 
                                              namespaces, search_all=add_all)
@@ -392,14 +396,14 @@ class FileLoader(object):
             self.load_location_bytes(location, inmemory=inmemory)
         if location.find('bytes::') > -1:
             data = self.rfiles_bytes[location]
-            file_info = OpenFile.from_bytes(data, fname)
+            file_info = self.FILE_OPENER.from_bytes(data, fname)
             file_info.location = location
         elif location.find('zip::') > -1:
             name = location.strip('zip::')
-            file_info = OpenFile.from_zip(self.rfiles_zip, name, inmemory)
+            file_info = self.FILE_OPENER.from_zip(self.rfiles_zip, name, inmemory)
             file_info.location = location
         elif location is not None:
-            file_info = OpenFile.from_file(location, inmemory)
+            file_info = self.FILE_OPENER.from_file(location, inmemory)
             file_info.location = location
         return file_info
 
@@ -411,14 +415,14 @@ class FileLoader(object):
 
         if location.find(b'bytes::') > -1:
             data = self.rfiles_bytes[location]
-            file_info = OpenFile.from_bytes(data, fname)
+            file_info = self.FILE_OPENER.from_bytes(data, fname)
             file_info.location = location
         elif location.find(b'zip::') > -1:
             name = location.strip(b'zip::')
-            file_info = OpenFile.from_zip(self.rfiles_zip, name, inmemory)
+            file_info = self.FILE_OPENER.from_zip(self.rfiles_zip, name, inmemory)
             file_info.location = location
         elif location is not None:
-            file_info = OpenFile.from_file(self.rfiles_zip, location, inmemory)
+            file_info = self.FILE_OPENER.from_file(self.rfiles_zip, location, inmemory)
             file_info.location = location
         return file_info
 

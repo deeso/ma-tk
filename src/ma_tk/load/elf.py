@@ -41,6 +41,10 @@ class OpenELF(OpenFile):
         return file_info
 
 class ElfFileLoader(FileLoader):
+    def __init__(self, **kargs):
+        super.__init__(**kargs)
+        self.set_file_opener(OpenELF)
+        print('')
 
     def load_file_from_zip(self, zipname, filename=None, inmemory=False, add_all=False):
         file_obj = OpenELF.from_zip(zipname, filename, inmemory)
@@ -65,3 +69,4 @@ class ElfFileLoader(FileLoader):
             file_info = OpenELF.from_file(self.rfiles_zip, location, inmemory)
             file_info.location = location
         return file_info
+
