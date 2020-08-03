@@ -42,6 +42,11 @@ class OpenELF(OpenFile):
 
 class ElfFileLoader(FileLoader):
 
+    def load_file_from_zip(self, zipname, filename=None, inmemory=False, add_all=False):
+        file_obj = OpenELF.from_zip(zipname, filename, inmemory)
+        if file_obj is not None:
+            self.add_file_to_namespace(file_obj, add_all=add_all)
+        return file_obj
 
     def load_location(self, location):
         '''

@@ -284,6 +284,12 @@ class FileLoader(object):
                  required_files_dir=required_files_dir,
                  required_files_zip=required_files_zip)
 
+    def load_file_from_zip(self, zipname, filename=None, inmemory=False, add_all=False):
+        file_obj = OpenFile.from_zip(zipname, filename, inmemory)
+        if file_obj is not None:
+            self.add_file_to_namespace(file_obj, add_all=add_all)
+        return file_obj
+
     def is_file_loaded(self, filename, namespace=None, namespaces=None, search_all=False):
         if search_all:
             return self.is_file_loaded(filename, namespaces=list(self.FILE_LOADERS))
@@ -309,6 +315,22 @@ class FileLoader(object):
             fl = cls.create_fileloader(namespace=namespace)
         fl.load_file(filename, namespace=namespace, namespaces=namespaces, add_all=add_all,inmemory=False)
 
+    def add_file_to_namespace(self, file_obj, namespace=None, namespaces=None, add_all=False):
+        if add_all:
+            namespaces = [k for k in self.FILE_LOADERS]
+        if namespace is None:
+            namespace = self.namespace
+        if namespaces is None:
+            namespaces = []
+
+        if len(namespaces) == 0 or namespace not in namespaces:
+            namespaces.append(namespace)
+
+        for namespace in namespaces:
+            self.FILE_LOADERS[namespace].loaded_rfiles[filename] = file_obj
+
+
+
     def load_file(self, filename, namespace=None, 
                   namespaces=None, add_all=False, reload=False, inmemory=False):
         '''
@@ -319,7 +341,7 @@ class FileLoader(object):
         '''
         # FIXME when reloading the file, do we reload it for all namespaces or
         # only the namespace specified in the arguments
-        _namespace = None
+        
         if not reload:
             _namespace = self.is_file_loaded(filename, namespace, 
                                              namespaces, search_all=add_all)
@@ -330,7 +352,7 @@ class FileLoader(object):
         if namespaces is None:
             namespaces = []
 
-        if namespace is not None:
+        if namespace is not None and not add_all:
             namespaces.append(namespace)
         elif add_all:
             namespaces = list(self.FILE_LOADERS.keys())
