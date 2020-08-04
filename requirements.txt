@@ -1,1 +1,2 @@
 wheel
+git+https://github.com/deeso/st-log@master#egg=st-log

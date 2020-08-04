@@ -25,6 +25,12 @@ class MemoryObject(object):
         self.name = "{:016x}-{:016x}:anonymous".format(va_start,va_start+size)
         self.flags = flags
 
+    def get_start(self):
+        return self.get_va_start()
+
+    def get_end(self):
+        return self.get_va_start() + self.size
+
     def get_va_start(self):
         return self.va_start
 

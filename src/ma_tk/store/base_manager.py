@@ -1,4 +1,6 @@
+from st_log.st_log import Logger
 from .. import util
+import logging
 
 class BaseManager(object):
 
@@ -11,9 +13,11 @@ class BaseManager(object):
         self.page_cache = set()
         self.page_size = kargs.get('page_size', 4096)
         self.page_mask = util.get_page_mask(self.page_size)
+        self.logger = Logger("matk.store.base_manager.BaseManager", level=kargs.get('loglevel', logging.INFO))
 
 
     def get_map(self, vaddr):
+        self.logger.debug("get_map retrieving vaddr: {:08x}".format(vaddr))
         if not self.check_presence(vaddr=vaddr):
             return None
         return self.maps_by_page[self.calc_page(vaddr)]
@@ -21,6 +25,7 @@ class BaseManager(object):
     def add_map_to_kb(self, bm):
         name = bm.get_name()
         pc = bm.get_page_cache()
+        self.logger.debug("add_map_to_kb adding memory map {} {:08x}-{:08x}".format(name, bm.get_start(), bm.get_end()))
         if self.check_presence(bm):
             return False
         self.vaddr_pos = bm.get_va_start()
@@ -32,6 +37,7 @@ class BaseManager(object):
 
     def remove_map_from_kb(self, bm):
         name = bm.get_name()
+        self.logger.debug("remove_map_from_kb adding memory map {} {:08x}-{:08x}".format(name, bm.get_start(), bm.get_end()))
         pc = bm.get_page_cache()
         
         if not self.check_presence(bm):
@@ -50,20 +56,27 @@ class BaseManager(object):
 
     def check_presence(self, bm=None, name=None, vaddr=None):
         page = self.calc_page(vaddr) if vaddr else None
+        result = False
+        how = 'Failed'
         if page and \
            (page in self.page_cache or page in self.maps_by_page):
-           return True
+           result = True
+           how = "page: {:08x}".format(page)
 
         if name and \
            (name in self.maps_by_name):
-           return True
+           result = True
+           how = "name: {}".format(name)
 
         if bm is not None:
             name = bm.get_name()
             pc = bm.get_page_cache()
-            return len(pc & self.page_cache) > 0 or \
-                   name in self.maps_by_name
-        return False
+            result = len(pc & self.page_cache) > 0 or \
+                     name in self.maps_by_name
+            how = "memory map: {:08x} {}".format(bm.get_start(), name)
+        
+        self.logger.debug("check_presence for memory map {} {}".format(result, how))
+        return result
 
     def get_page(self, vaddr):
         return self.calc_page(vaddr)
@@ -73,12 +86,14 @@ class BaseManager(object):
     
     def translate_vaddr_to_offset(self, vaddr):
         bm = self.get_map(vaddr)
+        self.logger.debug("translate_vaddr_to_offset Translated addr {:08x} to {}".format(vaddr, bm))
         if bm is None:
             return None
         return bm, bm.translate_vaddr_to_offset(vaddr)
 
     def translate_vaddr_to_paddr(self, vaddr):
         bm = self.get_map(vaddr)
+        self.logger.debug("translate_vaddr_to_paddr Translated addr {:08x} to {}".format(vaddr, bm))
         if bm is None:
             return None
 
@@ -89,10 +104,14 @@ class BaseManager(object):
         r = False
         if addr is not None:
             bm = self.get_map(addr)
+            self.logger.debug("seek to position: addr: {:08x} {}".format(addr, bm))
         elif offset is not None:
-            bm = self.get_map(self.vaddr_pos+offset)
+            addr = self.vaddr_pos+offset
+            bm = self.get_map(addr)
+            self.logger.debug("seek to position: addr: {:08x} {}".format(addr, bm))
         if bm is not None:
             r = bm.seek(offset=offset)
+            self.logger.debug("seek moved to position: addr: {:08x} {}".format(addr, bm))
             if r:
                 self.vaddr_pos = bm.get_current_vaddr()
         return r
@@ -103,6 +122,7 @@ class BaseManager(object):
     def read(self, size, addr=None, offset=None):
         # FIXME data does not read across memory boundaries
         addr = self.vaddr_pos if addr is None and offset is None else addr
+        self.logger.debug("read {} bytes @ addr: {:08x}".format(size, addr))
         if not addr is None:
             return self.read_at_vaddr(addr, size)
         elif offset is not None:
